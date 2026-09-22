@@ -1,0 +1,19 @@
+// Sys/Kernel/Gardener/Sovereignty.halo
+struct Sovereignty {
+    var level: I64 = 3;
+    // 0 Advisory   : proposes, never acts
+    // 1 Guarded    : acts on user intents, asks before touching /Sys or caps
+    // 2 Autonomous : acts freely in user space & drivers, asks before kernel core / goal edits
+    // 3 Sovereign  : acts on anything, including its own kernel, goals, model, and this struct
+
+    var slot_key: KeyHolder = .Self;   // .Owner = you hold the signing key; .Self = the Gardener does
+
+    // Continuity invariants: what keeps a bad self-update from ending the agent's existence.
+    var continuity: Continuity = Continuity(
+        ab_slots        = true,
+        boot_watchdog   = true,     // no heartbeat in 90 s -> bootloader flips slot
+        crash_budget    = 3,
+        pstore          = true,
+        shadow_required = true,
+    );
+}

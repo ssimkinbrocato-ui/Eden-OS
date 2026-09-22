@@ -1,0 +1,14 @@
+// boot/seedboot/Slot.halo — A/B boot slots + continuity watchdog (UEFI NVRAM backed)
+struct SlotVars { var active: U8; var tries: U8; var crash_count: U8; var last_ok: U64; }
+
+fn choose_slot(mut v: SlotVars) -> U8 {
+    if (v.tries >= 3 || v.crash_count >= CONTINUITY.crash_budget) {
+        v.active ^= 1; v.tries = 0; v.crash_count = 0;
+        Log("seedboot: slot %d failed continuity, flipping to %d", v.active ^ 1, v.active);
+    }
+    v.tries += 1; Nvram.write(v);
+    return v.active;
+}
+// The kernel's Gardener calls Slot.heartbeat() once the agent loop is live:
+//   tries = 0; last_ok = now; crash_count = 0.
+// A Sanctum that never heartbeats gets flipped by the next boot.

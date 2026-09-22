@@ -1,0 +1,3 @@
+// Sys/Boot.halo — user-editable startup script, run by the JIT at the end of boot.
+"Eden ready. %d cores, %d MiB free.\n", Cpu.count, Pmm.free_bytes() >> 20;
+Canopy.open(Apps.Files.new_window("/Home"));

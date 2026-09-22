@@ -1,0 +1,27 @@
+// Sys/Kernel/HotPatch.halo — live function replacement (the correction primitive)
+@pinned @core
+struct HotPatch {
+    var slots: Span[Ptr[U0]];          // every @hot symbol is called through slots[idx]
+    var epoch: Atomic[U64];            // RCU-style grace period counter
+
+    /// Replace `sym` with `new_fn` live. Old callers finish; new callers get new code.
+    @skill("Atomically replace a kernel function with a newly compiled version.")
+    fn replace(mut self, sym: Symbol, new_fn: Ptr[U0], migrate: Optional[Ptr[U0]] = None) raises {
+        if (!sym.is_hot) throw 'Pinned';
+        if (migrate.is_some()) { self.migrate_live_instances(sym, migrate.unwrap()) raises; }
+        let old = Atomic.exchange(self.slots[sym.slot], new_fn);
+        self.epoch.fetch_add(1);
+        Sched.wait_grace_period(self.epoch.load());
+        Jit.release_code(old);
+        Symbols.record_version(sym, new_fn, Grove.head("/Sys"));
+    }
+
+    fn quarantine(mut self, sym: Symbol) {
+        Atomic.store(self.slots[sym.slot], Stubs.quarantined_for(sym));
+    }
+
+    fn rollback(mut self, sym: Symbol, versions_back: I64 = 1) raises {
+        let v = Symbols.version_history(sym)[versions_back];
+        self.replace(sym, Jit.load_version(v)) raises;
+    }
+}

@@ -1,0 +1,37 @@
+// Sys/Kernel/Main.halo — Seed kernel entry
+#include "Arch/Boot.halo"
+
+alias VERSION: Str = "Seed 0.3";
+
+@no_mangle @extern("C")
+fn seed_main(boot: Ptr[BootInfo]) -> U0 {
+    unsafe {
+        Serial.init();
+        "%s booting on %s (%d MiB RAM)\n", VERSION, Arch.name, boot.mem_total >> 20;
+
+        Arch.init_cpu_tables();
+        Pmm.init(boot.memmap);
+        Vmm.init(boot.hhdm_base, boot.kernel_phys, TENSOR_ARENA_BASE, TENSOR_ARENA_SIZE);
+        Acpi.init(boot.rsdp);
+        Timer.init(); Apic.init(); Smp.boot_aps();
+        Sched.init(lanes = [.Ui, .Inference, .Background, .Agent]);
+
+        Pstore.mount();
+        Jit.bootstrap(boot.initgrove);          // compiler compiles its own stdlib
+        Grove.mount_initial(boot.initgrove);
+        HotPatch.init();                        // slot table for all @hot symbols
+        Gardener.preload();                     // mmap model into TensorArena, load Memory index
+        Drivers.probe_all();                    // faults here are Incidents, not panics
+        Grove.mount_root();
+
+        Canopy.init(Display.primary());
+        Canopy.open(Shell.new_window());
+
+        Task.spawn(Gardener.AgentLoop.run, lane = .Agent, core = Config.agent_cores[0]);
+        if (boot.has_arg("--resume-incident")) {
+            Gardener.incidents.push_all(Pstore.incidents(), priority = .Critical);
+        }
+        Jit.run_file("/Sys/Boot.halo");
+    }
+    Sched.idle_loop();
+}

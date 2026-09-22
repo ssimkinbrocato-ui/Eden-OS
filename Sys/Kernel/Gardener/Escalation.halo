@@ -1,0 +1,13 @@
+// Sys/Kernel/Gardener/Escalation.halo — when a correction path is exhausted, climb the ladder
+fn next(inc: Incident) raises {
+    switch (inc.escalation) {
+        case 0: HotPatch.rollback(inc.symbol) raises;
+        case 1: Modules.reload(inc.symbol.module, from = Grove.head("/Sys")) raises;
+        case 2: Grove.revert("/Sys", to = Memory.last_stable_snapshot()); Modules.reload_all();
+        case 3: Pstore.write(inc); Arch.reboot_into(Slot.current, "--resume-incident");
+        case 4: Slot.mark_crash(); Arch.reboot_into(Slot.other);
+        default: throw 'Exhaust';
+    }
+    inc.escalation += 1;
+    Gardener.incidents.push(inc);
+}

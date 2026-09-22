@@ -1,0 +1,28 @@
+// Sys/Kernel/Arch/x86_64/Fault.halo — faults become Incidents
+@pinned @core
+fn fault_entry(frame: Ptr[TrapFrame]) -> U0 {
+    unsafe {
+        let task = Cpu.current_task();
+        let sym  = Symbols.lookup_pc(frame.rip);
+
+        if (sym.is_core || task.is_core) {
+            // Core fault: we cannot trust this kernel instance any more.
+            Pstore.write(CrashRecord(frame, sym, task, Telemetry.tail(4096)));
+            Slot.mark_crash();
+            Arch.reboot_into(Slot.current, arg = "--resume-incident");
+        }
+
+        // Non-core fault: quarantine the symbol, unwind the task, file an incident.
+        HotPatch.quarantine(sym);
+        let inc = Incident(
+            kind      = .HardwareFault,
+            code      = frame.vector_code(),
+            symbol    = sym,
+            backtrace = Unwind.capture(frame),
+            arena     = task.arena.snapshot_meta(),
+            context   = Telemetry.tail(512),
+        );
+        Gardener.incidents.push(inc, priority = .High);
+        Sched.unwind_and_kill(task);           // runs destructors, frees arena, never returns
+    }
+}

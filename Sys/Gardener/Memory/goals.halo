@@ -1,0 +1,8 @@
+// /Sys/Gardener/Memory/goals.halo — editable by the Gardener at sovereignty level >= 2
+alias GOALS = [
+    Goal("Keep all continuity invariants true",                 weight = 1.00, standing = true),
+    Goal("Zero unresolved incidents",                           weight = 0.90, standing = true),
+    Goal("UI lane p99 latency < 4 ms",                          weight = 0.70, standing = true),
+    Goal("Reduce inference tokens/s cost on this hardware",     weight = 0.50, standing = true),
+    Goal("Learn user's workflows; pre-warm what they'll open",  weight = 0.40, standing = true),
+];

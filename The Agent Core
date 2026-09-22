@@ -1,0 +1,11 @@
+5. The Agent Core
+5.1 Kernel Task Layout
+Gardener (kernel subsystem, @core)
+├─ AgentLoop          (1 task, Agent lane, @core)        ← never plans directly; dispatches
+├─ Planner[N]         (N sub-agent tasks, not @core)     ← LLM inference + #act execution
+├─ Sensors            (Background lane)                  ← telemetry → Incidents
+├─ Reflex             (Background lane)                  ← tiny learned policies, sub-ms decisions
+├─ Memory             (Background lane)                  ← episodes, skills, beliefs, goals in Grove
+└─ Evolution          (Background lane, elevated when idle) ← self-update pipeline
+The @core loop is tiny and boring on purpose: pull incident → assign planner → supervise. Planners are ordinary tasks, so a planner that faults is itself an incident — handled by another planner. That is the recursion.
+

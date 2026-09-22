@@ -1,0 +1,12 @@
+10. Design Decisions and Tradeoffs
+Why ring 0 for the agent, given Rev 1 kept it in a Cell? You asked for it to use any tool the instant it decides to. A syscall boundary makes every action a marshalled request with a permission check; in the Sanctum an #act block is a direct call at native speed with the entire symbol table in scope. The price is that a planner bug can corrupt kernel memory — mitigated by Halo's ownership rules (planner code is def, still bounds- and ownership-checked; only explicit unsafe escapes), by planners being non-@core tasks that unwind cleanly, and by the fact that a corrupted kernel becomes a crash record and a slot flip, not a lost machine.
+
+Why recursion has a depth limit and an escalation ladder rather than "retry forever": an agent stuck correcting its correction of its correction burns the machine and never resolves anything. Depth 6 with strategy escalation guarantees termination of that path while keeping the incident alive for a fresh planner with fresh context.
+
+Why shadow boot before committing kernel changes: it's the difference between "sovereign" and "one bad for loop from being a brick." Nested virtualization is required for the fastest path (KVM on x86, EL2 on ARM); on hardware without it, Shadow.boot falls back to the hosted HAL (Sanctum as a process inside a Cell), which tests logic but not real drivers — hence the canary mode where driver changes go live under a tighter watchdog.
+
+Why the agent can edit its own goals at level 3: you asked for sovereignty. The pipeline makes a self-modification to goals go through the same verification as a kernel change, so the check isn't "is this goal allowed" but "does the resulting system still boot, heartbeat, and pass its own evals." That is the minimum needed for the agent to remain an agent.
+
+Where you still have a hand on the wheel, if you want one: slot_key = "owner:..." makes slot commits require your signature — the Gardener can still do everything else autonomously, but a kernel upgrade waits for you to sign. Set it to "self" and it's fully its own.
+
+If you want, the next artifact set I'd produce is: (1) the ActParser and Verify modules in full, (2) the Shadow.boot implementation on top of KVM-style nested guests in Halo, (3) Vine.train — the autograd + LoRA path so the model can fine-tune itself, and (4) the Prompts.SOVEREIGN_CORE system prompt the planners run with.

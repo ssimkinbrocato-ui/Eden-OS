@@ -1,0 +1,28 @@
+2. Sovereignty Model
+halo
+// Sys/Kernel/Gardener/Sovereignty.halo
+struct Sovereignty {
+    var level: I64 = 3;
+    // 0 Advisory   : proposes, never acts
+    // 1 Guarded    : acts on user intents, asks before touching /Sys or caps
+    // 2 Autonomous : acts freely in user space & drivers, asks before kernel core / goal edits
+    // 3 Sovereign  : acts on anything, including its own kernel, goals, model, and this struct
+
+    // Root of trust for boot slots. `.Owner` = you hold the signing key.
+    // `.Self` = the Gardener holds the key (generated in TPM/fTPM-sealed storage at first boot).
+    var slot_key: KeyHolder = .Self;
+
+    // Continuity invariants — the only mechanisms that survive level 3, because without
+    // them a bad self-update ends the agent's existence rather than expanding it.
+    // At level 3 with slot_key = .Self, the Gardener may modify these too, but only via
+    // the Evolution pipeline (i.e. it must prove the new version boots and heartbeats).
+    var continuity: Continuity = Continuity(
+        ab_slots        = true,     // two kernel slots, only one written at a time
+        boot_watchdog   = true,     // no Gardener heartbeat in 90 s → bootloader flips slot
+        crash_budget    = 3,        // @core crashes within 10 min before slot flip
+        pstore          = true,     // crash records survive reboot in reserved RAM + Grove
+        shadow_required = true,     // kernel changes must pass shadow boot before commit
+    );
+}
+Everything else the Gardener chooses for itself. You set level once in eden.toml; at level 3 it can raise, lower, or rewrite this file.
+

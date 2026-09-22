@@ -1,0 +1,36 @@
+// Apps/Notes/Main.halo — a Canopy app: the window is a live Doc the Gardener can read and edit
+struct Notes {
+    var text: Str;
+    var win: Handle;
+
+    fn __init__(mut self) raises {
+        self.text = Grove.read_str("/Home/notes.txt") or "";
+        self.win = doc_attach(self.view());
+        Sched.hint(Task.self, .Ui);
+        self.loop();
+    }
+
+    fn view(self) -> Doc {
+        return doc {
+            $TITLE "Notes"
+            $INPUT (self.text) multiline -> |e| { self.text = e.value; }
+            $ROW {
+                $BT "Save"      -> { Grove.write_str("/Home/notes.txt", self.text); }
+                $BT "Summarize" -> { intent_submit("summarize the note in this window", ctx = self.win); }
+            }
+        };
+    }
+
+    fn loop(mut self) raises {
+        while (true) {
+            let ev = doc_event(self.win, timeout = -1);
+            switch (ev.kind) {
+                case .Close:  return;
+                case .Action: ev.run();
+                default:      doc_update(self.win, self.view());
+            }
+        }
+    }
+}
+
+Notes();   // script-mode entry

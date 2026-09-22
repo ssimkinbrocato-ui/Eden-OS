@@ -1,0 +1,6 @@
+4.4 Memory Layout Additions
+0xFFFF_C000_0000_0000   TensorArena          (unchanged: model weights, KV cache, LoRA deltas)
+0xFFFF_C800_0000_0000   AgentContext         (pinned: working context windows for main + sub-agents)
+0xFFFF_D000_0000_0000   JIT code heap        (unchanged; now versioned per symbol)
+0xFFFF_D800_0000_0000   ShadowSanctum        (nested-guest memory for shadow boots, EPT/stage-2 mapped)
+phys reserved 64 MiB    Pstore               (crash records; survives warm reboot, mirrored to Grove)

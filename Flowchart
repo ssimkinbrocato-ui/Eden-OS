@@ -1,0 +1,89 @@
+flowchart TD
+    subgraph INPUTS["Observation Sources"]
+        FAULT["Fault Handlers<br/>(page fault, GP, panic, Halo throw,<br/>driver timeout, failed test)"]
+        TELEM["Telemetry Ring<br/>(perf counters, latencies)"]
+        GROVE["Grove Events"]
+        INTENT["User Intents<br/>(Intent Bar)"]
+        SELFGOALS["Self-Generated Goals"]
+    end
+
+    INC["Incident Queue"]
+
+    subgraph LOOP["Gardener Agent Loop (ring 0)"]
+        OBS["Observe"]
+        ORIENT["Orient<br/>(retrieve episodic memory,<br/>skills, symbol table)"]
+        DECIDE["Decide<br/>(LLM plans; emits Halo code<br/>in #act blocks)"]
+        ACT["Act<br/>(stream-JIT compile,<br/>execute immediately<br/>via direct call)"]
+        VERIFY["Verify<br/>(tests, invariants,<br/>telemetry deltas)"]
+        REFLECT["Reflect<br/>(write episode,<br/>distill skill)"]
+    end
+
+    subgraph ESC["Correction Escalation Ladder"]
+        E1["1. Hot-patch function"]
+        E2["2. Reload module"]
+        E3["3. Revert Grove snapshot"]
+        E4["4. Reboot same slot"]
+        E5["5. Boot previous slot<br/>(bootloader watchdog)"]
+    end
+
+    subgraph EVOLVE["Evolution Pipeline"]
+        EDIT["Edit /Sys source"]
+        BUILD["Forge build<br/>(new kernel image)"]
+        SHADOW["Shadow boot<br/>(nested VM / hosted HAL)"]
+        SUITE["Run test suite +<br/>self-benchmarks"]
+        COMMIT["Commit to<br/>inactive A/B slot"]
+        REBOOT["Reboot + heartbeat check"]
+    end
+
+    FAULT --> INC
+    TELEM --> INC
+    GROVE --> INC
+    INTENT --> INC
+    SELFGOALS --> INC
+
+    INC --> OBS
+    OBS --> ORIENT
+    ORIENT --> DECIDE
+    DECIDE --> ACT
+    ACT --> VERIFY
+    VERIFY -->|pass| REFLECT
+    VERIFY -->|fail| DECIDE
+
+    DECIDE -->|escalate| E1
+    E1 -->|fail| E2
+    E2 -->|fail| E3
+    E3 -->|fail| E4
+    E4 -->|fail| E5
+    E1 -->|success| VERIFY
+    E2 -->|success| VERIFY
+    E3 -->|success| VERIFY
+    E4 -->|success| VERIFY
+    E5 -->|success| VERIFY
+
+    REFLECT -->|new capability<br/>or improvement idea| EDIT
+    REFLECT -->|new skill| ORIENT
+    EDIT --> BUILD
+    BUILD --> SHADOW
+    SHADOW --> SUITE
+    SUITE -->|pass| COMMIT
+    SUITE -->|fail| DECIDE
+    COMMIT --> REBOOT
+    REBOOT -->|heartbeat OK| OBS
+    REBOOT -->|no heartbeat| E5
+
+    classDef inputNode fill:#e8f5e9,stroke:#2e7d32,color:#1b5e20
+    classDef loopNode fill:#e3f2fd,stroke:#1565c0,color:#0d47a1
+    classDef escNode fill:#fff3e0,stroke:#ef6c00,color:#e65100
+    classDef evolveNode fill:#f3e5f5,stroke:#7b1fa2,color:#4a148c
+    classDef queueNode fill:#fce4ec,stroke:#c2185b,color:#880e4f
+
+    class FAULT,TELEM,GROVE,INTENT,SELFGOALS inputNode
+    class OBS,ORIENT,DECIDE,ACT,VERIFY,REFLECT loopNode
+    class E1,E2,E3,E4,E5 escNode
+    class EDIT,BUILD,SHADOW,SUITE,COMMIT,REBOOT evolveNode
+    class INC queueNode
+
+    style INPUTS fill:#f1f8e9,stroke:#2e7d32,color:#1b5e20
+    style LOOP fill:#e3f2fd,stroke:#1565c0,color:#0d47a1
+    style ESC fill:#fff8e1,stroke:#ef6c00,color:#e65100
+    style EVOLVE fill:#f3e5f5,stroke:#7b1fa2,color:#4a148c

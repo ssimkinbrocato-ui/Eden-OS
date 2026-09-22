@@ -11,7 +11,7 @@ repo link to the assistant and say "what's next?".
 - [x] GitHub Actions CI (.github/workflows/eden-ci.yml)
 - [x] README, .gitignore, justfile
 
-## Next — ask the assistant for "part 5"  (part 4 done: Notes app, Halo language spec)  (part 3 done: agent loop, evolution, virtio-blk, matmul)  (part 2 done: kernel, Gardener core, boot slots)
+## Next — ask the assistant for "part 6"  (part 5 done: Seed kernel doc)  (part 4 done: Notes app, Halo language spec)  (part 3 done: agent loop, evolution, virtio-blk, matmul)  (part 2 done: kernel, Gardener core, boot slots)
 - [ ] Halo source files at their real paths (Sys/Kernel, Sys/Kernel/Gardener, Sys/Drivers, boot/, Apps/)
 
 ## Then — "part 3"

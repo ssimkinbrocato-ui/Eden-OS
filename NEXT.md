@@ -1,1 +1,1 @@
-Next step: tell the assistant 'part 5'.
+Next step: tell the assistant 'part 6'.

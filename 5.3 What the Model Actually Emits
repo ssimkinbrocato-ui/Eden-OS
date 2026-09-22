@@ -1,0 +1,27 @@
+5.3 What the Model Actually Emits
+A planner transcript fixing a real driver bug (the #act blocks ran mid-generation):
+
+Incident: HardwareFault #GP in VirtioBlk.read (Sys/Drivers/Block/VirtioBlk.halo:41),
+          symbol quarantined, task vblk-io-3 unwound. 2 occurrences in 40 s.
+
+Thought: Read the faulting function and the trap frame.
+#act { Grove.read_lines("/Sys/Drivers/Block/VirtioBlk.halo", 30, 55); }
+→ ... 41:  let d = self.vq.chain([.out(req.as_bytes()), .in(buf), .in(Span.of(status))]); ...
+#act { inc.backtrace.frames[0..3]; inc.context.filter("virtio"); }
+→ frame0 VirtQueue.chain+0x4c  rsi=0x0 ...  telemetry: "virtio-blk: queue full, wrapped idx 128"
+
+Thought: chain() dereferences a null descriptor when the ring is full. Fix: block on free slots.
+#act {
+  Grove.patch("/Sys/Drivers/Block/VirtioBlk.halo", at = 41, replace = 1, with =
+    "        while (self.vq.free_count() < 3) self.irq.wait_any(1ms);\n" +
+    "        let d = self.vq.chain([.out(req.as_bytes()), .in(buf), .in(Span.of(status))]);");
+  let m = Forge.compile_module("/Sys/Drivers/Block/VirtioBlk.halo");
+  HotPatch.replace(Symbols["VirtioBlk.read"], m["VirtioBlk.read"]);
+}
+→ ok (Forge 212 ms, patch applied, grace period 1.3 ms)
+
+#act { Tests.run("Sys/Drivers/Block", tags = ["stress"]); }
+→ 14 passed, 0 failed, 0 quarantined symbols remaining
+
+Reflect: Pattern "ring-full null deref in virtqueue chain" → distilled skill
+         VirtQueue.chain_blocking(); added regression @test.

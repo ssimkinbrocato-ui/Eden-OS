@@ -1,0 +1,32 @@
+4.2 Hot-Patching (the correction primitive)
+halo
+// Sys/Kernel/HotPatch.halo
+@pinned @core
+struct HotPatch {
+    // Every @hot symbol is called through slots[idx] — one indirect jump.
+    var slots: Span[Ptr[U0]];
+    var epoch: Atomic[U64];            // RCU-style grace period counter
+
+    /// Replace `sym` with `new_fn` live. Old callers finish; new callers get new code.
+    @skill("Atomically replace a kernel function with a newly compiled version.")
+    fn replace(mut self, sym: Symbol, new_fn: Ptr[U0], migrate: Optional[Ptr[U0]] = None) raises {
+        if (!sym.is_hot) throw 'Pinned';
+        if (migrate.is_some()) { self.migrate_live_instances(sym, migrate.unwrap()) raises; }
+        let old = Atomic.exchange(self.slots[sym.slot], new_fn);
+        self.epoch.fetch_add(1);
+        Sched.wait_grace_period(self.epoch.load());     // all CPUs pass a quiescent point
+        Jit.release_code(old);                          // now safe to free old text
+        Symbols.record_version(sym, new_fn, Grove.head("/Sys"));
+    }
+
+    fn quarantine(mut self, sym: Symbol) {
+        Atomic.store(self.slots[sym.slot], Stubs.quarantined_for(sym));
+    }
+
+    fn rollback(mut self, sym: Symbol, versions_back: I64 = 1) raises {
+        let v = Symbols.version_history(sym)[versions_back];
+        self.replace(sym, Jit.load_version(v)) raises;
+    }
+}
+Cost: one indirect branch per non-inlined kernel call (~0.5–1 ns with a hot BTB). Forge inlines aggressively inside modules so the tax lands mostly on cross-module calls. Hot-patch of a function whose signature or struct layout changed requires a @migrate — which the Gardener writes as part of the patch.
+

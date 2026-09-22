@@ -1,1 +1,1 @@
-Next step: tell the assistant 'part 6'.
+Initial setup complete. Next step: tell the assistant 'phase 2' (see STATUS.md).

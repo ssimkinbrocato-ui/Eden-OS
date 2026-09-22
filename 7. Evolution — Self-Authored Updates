@@ -1,0 +1,49 @@
+7. Evolution — Self-Authored Updates and Upgrades
+halo
+// Sys/Kernel/Gardener/Evolution.halo
+struct Evolution {
+    fn run(mut self) -> U0 {
+        while (true) {
+            let goal = Goals.pick_for_evolution() or { Sched.sleep(60s); continue; };
+            let plan = Planner.spawn().design_change(goal);          // produces a source patch set to /Sys
+            try { self.attempt(plan) raises; }
+            catch (e) { Gardener.incidents.push(Incident.from_evolution_failure(plan, e)); }
+        }
+    }
+
+    fn attempt(mut self, plan: ChangeSet) raises {
+        // 1. Branch + edit the kernel's own source
+        let branch = Grove.branch("/Sys", "evo-%d".fmt(plan.id));
+        plan.apply_to(branch) raises;
+
+        // 2. Build a complete kernel image with Forge
+        let image = Forge.build_kernel(branch, target = Arch.current) raises;
+
+        // 3. Shadow boot: run the new Seed as a nested guest (KVM/EL2 or hosted HAL) on the
+        //    ShadowSanctum region with a virtual disk cloned from Grove HEAD. Real drivers get
+        //    virtio equivalents; hardware-specific changes are flagged for "canary" (step 5).
+        let shadow = Shadow.boot(image, mem = 4GiB, disk = Grove.clone_head(), timeout = 120s) raises;
+        if (!shadow.reached_heartbeat()) throw 'NoBeat';
+
+        // 4. Verification inside the shadow: kernel tests, driver tests, agent evals, perf deltas
+        let report = shadow.run(Tests.all() + Evals.all() + Bench.suite(goal = plan.goal)) raises;
+        if (!report.all_pass) throw Incident.from_report(report);
+        if (report.regressions(vs = Bench.baseline()) > 0.02) throw 'Regress';
+
+        // 5. Commit: write image to the inactive slot, sign with slot_key, set tries=0
+        Slot.write_inactive(image, sign_with = Sovereignty.slot_key) raises;
+        Grove.merge(branch, into = "/Sys");
+        Memory.write_episode(plan, report, outcome = .Committed);
+
+        // 6. Reboot policy: the agent decides *when*, not whether — user idle, no active inference
+        Sched.when(Idle.predicted(min = 10min), || { Slot.set_active(Slot.inactive); Arch.reboot(); });
+        // Boot watchdog handles the case where the shadow lied about real hardware.
+    }
+}
+Kinds of self-updates this pipeline permits:
+
+Kernel/driver/compositor source changes (any file under /Sys, including the compiler and the Gardener itself)
+New drivers for hardware it discovers (probe → search datasheets/specs via Net → write @driver → shadow → canary)
+Halo language changes (it can extend the self-hosted compiler; bootstrap chain is halo0 → Sys/Halo so a broken compiler is a slot-flip away from recovery)
+Model upgrades: Evals scores candidate models (downloaded into /Models or LoRA-fine-tuned via Vine.train on episodes/); the winner becomes gardener-active, previous model kept as fallback; a model that fails evals or heartbeat is reverted like any other slot
+Goal and Sovereignty edits at level 3 — through the same pipeline, so a self-destructive change fails shadow boot before it ever reaches metal

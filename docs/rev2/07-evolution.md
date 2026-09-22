@@ -1,5 +1,4 @@
 7. Evolution — Self-Authored Updates and Upgrades
-halo
 // Sys/Kernel/Gardener/Evolution.halo
 struct Evolution {
     fn run(mut self) -> U0 {

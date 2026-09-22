@@ -1,0 +1,12 @@
+name: eden-ci
+on: [push, pull_request]
+jobs:
+  halo0:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build stage-0 compiler
+        run: cargo build --release --manifest-path halo0/Cargo.toml
+      - name: Lex-check all Halo sources
+        run: find . -name "*.halo" -not -path "./halo0/*" -print0 | xargs -0 -r -n1 ./halo0/target/release/halo0

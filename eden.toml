@@ -1,5 +1,3 @@
-9. Updated eden.toml
-toml
 [image]
 name      = "eden"
 arch      = "x86_64"
@@ -25,14 +23,8 @@ shadow_required = true
 pstore_mib      = 64
 
 [qemu]
-machine = "q35"  mem = "16G"  cpu = "host"  nested = true    # nested virt for Shadow.boot
+machine = "q35"
+mem     = "16G"
+cpu     = "host"
+nested  = true                     # nested virt for Shadow.boot
 devices = ["virtio-gpu-pci", "virtio-blk-pci", "virtio-net-pci", "virtio-keyboard-pci", "virtio-mouse-pci"]
-bash
-# run/qemu-x86_64.sh (excerpt)
-qemu-system-x86_64 -M q35 -m 16G -smp 8 -cpu host,+vmx -enable-kvm \
-  -drive if=pflash,format=raw,readonly=on,file=OVMF_CODE.fd \
-  -drive if=pflash,format=raw,file=build/OVMF_VARS.fd \            # slot vars live here
-  -drive file=build/eden.img,if=none,id=d0,format=raw -device virtio-blk-pci,drive=d0 \
-  -device virtio-gpu-pci -device virtio-keyboard-pci -device virtio-mouse-pci \
-  -netdev user,id=n0 -device virtio-net-pci,netdev=n0 \
-  -serial mon:stdio

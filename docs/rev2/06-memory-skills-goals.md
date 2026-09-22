@@ -5,7 +5,6 @@
 ├─ beliefs.halo  facts about this machine/user the agent has verified ("NVMe controller quirk X", "user idle 02–07h")
 ├─ goals.halo    standing + self-generated goals with weights
 └─ evals/        its own benchmark suite for models and kernels
-halo
 // /Sys/Gardener/Memory/goals.halo  — editable by the Gardener at level ≥ 2
 alias GOALS = [
     Goal("Keep all continuity invariants true",                 weight = 1.00, standing = true),

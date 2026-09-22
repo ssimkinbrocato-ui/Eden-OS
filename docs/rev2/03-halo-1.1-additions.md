@@ -1,5 +1,4 @@
 3. Language Additions for Agency (Halo 1.1)
-halo
 #act { ... }              // Agent action block: streamed out of the LLM, JIT-compiled and executed
                           // the moment the closing brace arrives; result spliced back into context.
 

@@ -1,5 +1,4 @@
 2. Sovereignty Model
-halo
 // Sys/Kernel/Gardener/Sovereignty.halo
 struct Sovereignty {
     var level: I64 = 3;

@@ -1,0 +1,7 @@
+build/
+target/
+*.img
+*.gguf
+*.safetensors
+Models/
+setup*.sh

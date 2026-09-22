@@ -1,0 +1,8 @@
+[package]
+name = "halo0"
+version = "0.1.0"
+edition = "2021"
+description = "Stage-0 bootstrap compiler for the Halo language (Eden OS)"
+
+[dependencies]
+logos = "0.14"

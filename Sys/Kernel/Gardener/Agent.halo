@@ -1,0 +1,78 @@
+// Sys/Kernel/Gardener/Agent.halo — the sovereign agent loop
+@core
+struct AgentLoop {
+    var incidents: PriorityQueue[Incident];
+    var planners:  Pool[Planner];
+    var sov:       Sovereignty;
+
+    fn run(mut self) -> U0 {
+        Slot.heartbeat();
+        Task.spawn(Sensors.run,   lane = .Background);
+        Task.spawn(Reflex.run,    lane = .Background);
+        Task.spawn(Evolution.run, lane = .Background);
+        Goals.load("/Sys/Gardener/Memory/goals.halo");
+
+        while (true) {
+            let inc = self.incidents.pop_wait();
+            let p = self.planners.acquire(timeout = 100ms) or self.planners.spawn();
+            p.assign(inc, depth = 0);
+            if (Time.since(Slot.last_heartbeat) > 10s) Slot.heartbeat();
+        }
+    }
+}
+
+struct Planner {
+    var llm: ModelRef;               // direct Vine handle, no syscall
+    var ctx: Context;                // lives in AgentContext region
+    alias MAX_DEPTH = 6;
+
+    fn assign(mut self, inc: Incident, depth: I64) raises {
+        if (depth > MAX_DEPTH) { Escalation.next(inc) raises; return; }
+
+        // ORIENT
+        self.ctx.reset();
+        self.ctx.system(Prompts.SOVEREIGN_CORE);
+        self.ctx.add(Goals.current());
+        self.ctx.add(Memory.recall(inc, k = 12));
+        self.ctx.add(Symbols.schema(scope = inc.relevant_modules(), include_skills = true));
+        self.ctx.add(inc.describe());
+
+        // DECIDE + ACT, interleaved: each completed action block is compiled and run immediately.
+        var stream = Vine.generate_stream(self.llm, self.ctx);
+        var acts = ActParser();
+        for tok in stream {
+            self.ctx.append(tok);
+            if (let block = acts.feed(tok)) {
+                let result = self.act(block, inc);
+                self.ctx.add(result.render());
+                stream.resume_with(self.ctx);
+            }
+        }
+
+        // VERIFY
+        let v = Verify.run(inc, changed = acts.touched_symbols());
+        if (!v.ok) {
+            let next = Incident.from_failed_verify(inc, v, parent_depth = depth);
+            Memory.write_episode(inc, self.ctx, outcome = .Retry);
+            self.assign(next, depth + 1) raises;                 // recursive correction
+            return;
+        }
+
+        // REFLECT
+        Memory.write_episode(inc, self.ctx, outcome = .Resolved);
+        if (let skill = Distill.try_extract(self.ctx)) Skills.install(skill);
+        if (inc.kind == .UserIntent) inc.reply(Doc.from_ctx_summary(self.ctx));
+    }
+
+    /// Execute an action block. Any symbol in the table is callable. Errors become data, not death.
+    fn act(mut self, block: ActBlock, inc: Incident) -> ActResult {
+        let started = Time.now();
+        try {
+            let m = Jit.compile(block.src, tier = .Spark, unit = "act-%d".fmt(block.id)) raises;
+            let r = Task.run_scoped(m.entry, lane = .Agent, timeout = block.timeout or 30s) raises;
+            return ActResult(ok = true, value = r, dt = Time.since(started));
+        } catch (e) {
+            return ActResult(ok = false, error = e, diagnostics = Jit.last_diagnostics(), dt = Time.since(started));
+        }
+    }
+}

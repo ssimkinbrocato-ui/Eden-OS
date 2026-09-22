@@ -1,0 +1,37 @@
+// Sys/Kernel/Gardener/Evolution.halo — self-authored updates and upgrades
+struct Evolution {
+    fn run(mut self) -> U0 {
+        while (true) {
+            let goal = Goals.pick_for_evolution() or { Sched.sleep(60s); continue; };
+            let plan = Planner.spawn().design_change(goal);
+            try { self.attempt(plan) raises; }
+            catch (e) { Gardener.incidents.push(Incident.from_evolution_failure(plan, e)); }
+        }
+    }
+
+    fn attempt(mut self, plan: ChangeSet) raises {
+        // 1. Branch + edit the kernel's own source
+        let branch = Grove.branch("/Sys", "evo-%d".fmt(plan.id));
+        plan.apply_to(branch) raises;
+
+        // 2. Build a complete kernel image
+        let image = Forge.build_kernel(branch, target = Arch.current) raises;
+
+        // 3. Shadow boot the new kernel as a nested guest
+        let shadow = Shadow.boot(image, mem = 4GiB, disk = Grove.clone_head(), timeout = 120s) raises;
+        if (!shadow.reached_heartbeat()) throw 'NoBeat';
+
+        // 4. Verify inside the shadow
+        let report = shadow.run(Tests.all() + Evals.all() + Bench.suite(goal = plan.goal)) raises;
+        if (!report.all_pass) throw Incident.from_report(report);
+        if (report.regressions(vs = Bench.baseline()) > 0.02) throw 'Regress';
+
+        // 5. Commit to the inactive slot
+        Slot.write_inactive(image, sign_with = Sovereignty.slot_key) raises;
+        Grove.merge(branch, into = "/Sys");
+        Memory.write_episode(plan, report, outcome = .Committed);
+
+        // 6. Reboot when the user is idle; the boot watchdog covers hardware the shadow could not test
+        Sched.when(Idle.predicted(min = 10min), || { Slot.set_active(Slot.inactive); Arch.reboot(); });
+    }
+}

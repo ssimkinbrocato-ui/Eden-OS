@@ -1,0 +1,35 @@
+// Sys/Drivers/Block/VirtioBlk.halo — hot-reloadable virtio block driver
+@driver(pci(vendor = 0x1AF4, device = 0x1001...0x1042, subsys = 2))
+struct VirtioBlk : BlockDevice {
+    var vq:  VirtQueue;
+    var cfg: Ptr[VirtioBlkConfig];
+    var irq: Irq;
+
+    fn probe(mut self, dev: Device) raises {
+        let pci = dev as PciDevice;
+        let bar = pci.map_bar(4) raises;
+        unsafe { self.cfg = (bar.base + VIRTIO_DEV_CFG_OFF) as Ptr[VirtioBlkConfig]; }
+        Virtio.negotiate(pci, wanted = VIRTIO_BLK_F_FLUSH | VIRTIO_F_VERSION_1) raises;
+        self.vq  = VirtQueue.new(pci, index = 0, size = 128) raises;
+        self.irq = pci.msix(0, handler = self.on_irq) raises;
+        Block.register(self, name = "vblk%d".fmt(Block.count));
+        "virtio-blk: %d sectors\n", unsafe { self.cfg.capacity };
+    }
+
+    fn block_size(self) -> I64 { return 512; }
+
+    fn read(mut self, lba: U64, mut buf: Span[U8]) raises {
+        while (self.vq.free_count() < 3) self.irq.wait_any(1ms);       // never chain on a full ring
+        var req = VirtioBlkReq(type = VIRTIO_BLK_T_IN, sector = lba);
+        var status: U8 = 0xFF;
+        let d = self.vq.chain([.out(req.as_bytes()), .in(buf), .in(Span.of(status))]);
+        self.vq.kick(d);
+        self.irq.wait_for(d) raises;
+        if (status != 0) throw 'IoErr';
+    }
+
+    fn write(mut self, lba: U64, buf: Span[U8]) raises { /* symmetric with VIRTIO_BLK_T_OUT */ }
+    fn flush(mut self) raises { /* VIRTIO_BLK_T_FLUSH */ }
+    fn remove(mut self) { self.irq.release(); self.vq.destroy(); }
+    fn on_irq(mut self) { self.vq.reap_used(); }
+}

@@ -1,0 +1,20 @@
+// Sys/Vine/Kernels/MatmulQ4.halo — 4-bit quantized matmul, same source for CPU SIMD and GPU
+@kernel(target = [.cpu, .gpu])
+@autotune(TM = [32, 64, 128], TN = [64, 128, 256])
+fn matmul_q4[M: I64, N: I64, K: I64, TM: I64, TN: I64](
+    a: Tensor[F16, M, K], w: QTensor[Q4_K, K, N], mut out: Tensor[F16, M, N]
+) {
+    alias W = simd_width[F32]();
+    #for bm in 0..(M / TM) {
+        #for bn in 0..(N / TN) {
+            var acc = Tile[F32, TM, TN](0);
+            var k: I64 = 0;
+            while (k < K) {
+                let wblk = w.dequant_block[W](k, bn * TN);      // Q4_K -> SIMD[F32, W] on the fly
+                acc.fma(a.tile[TM, W](bm * TM, k), wblk);
+                k += W;
+            }
+            out.store_tile(bm * TM, bn * TN, acc.cast[F16]());
+        }
+    }
+}
